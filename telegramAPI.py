@@ -2,43 +2,78 @@ __author__ = 'rcj1492'
 __created__ = '2016.10'
 __license__ = 'MIT'
 
+'''
+pip install requests
+'''
+
 from time import sleep
 import os
 import json
-import telegram
+import requests
 
 def send_message(access_token, user_id, msg_text):
 
-# construct client and key word arguments
-    message_kwargs = {
-        'chat_id': user_id,
-        'text': msg_text
+# construct key word arguments
+    request_kwargs = {
+        'url': 'https://api.telegram.org/bot%s/sendMessage' % access_token,
+        'data': {
+            'chat_id': user_id,
+            'text': msg_text
+        }
     }
-    client = telegram.Bot(token=access_token)
+
+# send message
+    response = requests.post(**request_kwargs)
+
+    return response.json()
+
+def send_photo(access_token, user_id, photo_path, caption_text=''):
+
+# construct key word arguments
+    request_kwargs = {
+        'url': 'https://api.telegram.org/bot%s/sendPhoto' % access_token,
+        'data': {
+            'chat_id': user_id
+        }
+    }
+    if caption_text:
+        request_kwargs['data']['caption'] = caption_text
+
+# add photo to request keywards
+    if not os.path.exists(photo_path):
+        raise ValueError('%s is not a valid file path.' % photo_path)
+    request_kwargs['files'] = { 'photo': open(photo_path, 'rb') }
 
 # send welcome message
-    response = client.sendMessage(**message_kwargs)
+    response = requests.post(**request_kwargs)
 
-    return response.to_dict()
+    return response.json()
 
 def get_updates(access_token, last_update_path=''):
 
-# construct client and key words
-    update_kwargs = {}
+# construct key word arguments
+    request_kwargs = {
+        'url': 'https://api.telegram.org/bot%s/getUpdates' % access_token,
+    }
+
+# add offset to kwargs
     if last_update_path:
         file_details = json.loads(open(last_update_path).read())
         if 'last_update' in file_details.keys():
-            update_kwargs['offset'] = file_details['last_update'] + 1
-    client = telegram.Bot(token=access_token)
+            # update_kwargs['offset'] = file_details['last_update'] + 1
+            request_kwargs['data'] = {
+                'offset': file_details['last_update'] + 1
+            }
 
-# send request
-    response = client.getUpdates(**update_kwargs)
+# send get update request
+    response_object = requests.post(**request_kwargs)
+    response = response_object.json()
 
 # construct update list
     update_list = []
-    if response:
-        for i in range(len(response)):
-            update_list.append(response[i].to_dict())
+    if response['result']:
+        for i in range(len(response['result'])):
+            update_list.append(response['result'][i])
 
     return update_list
 
@@ -214,11 +249,20 @@ def analyze_updates(access_token, text_commands, user_table_path, message_folder
                                 message_kwargs['msg_text'] = command_details['msg_clarify']
                         message_details = send_message(**message_kwargs)
                         log_message(message_folder_path, message_details)
+                    if command_details['message_type'] == 'photo_message':
+                        message_kwargs = {
+                            'access_token': access_token,
+                            'user_id': user_details['id'],
+                            'photo_path': command_details['attachment_file'],
+                            'caption_text': command_details['msg_text']
+                        }
+                        message_details = send_photo(**message_kwargs)
+                        log_message(message_folder_path, message_details)
 
     return True
 
 if __name__ == '__main__':
-    from credentials.credTelegram import telegram_credentials
+    from credentials.credTelegram import telegram_credentials, user_id_list
     user_table = json.loads(open('data/user_table.json').read())
     text_commands = json.loads(open('data/text_commands.json').read())
     access_token = telegram_credentials['access_token']
