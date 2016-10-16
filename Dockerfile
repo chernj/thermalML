@@ -21,6 +21,8 @@ RUN apk add g++
 
 # Install Python Modules
 RUN pip install python-telegram-bot
+RUN pip install requests
+RUN pip install moves
 
 # Install Localtunnel
 # RUN apk add nodejs@community
